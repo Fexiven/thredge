@@ -87,6 +87,17 @@ function signalWords(rssi) {
   return 'weak';
 }
 
+/* --- footer ------------------------------------------------------------ */
+
+(function() {
+  var f = document.getElementById('footer');
+  if (!f) { return; }
+  fetch('/api/ota/version', {headers : {'Accept' : 'application/json'}})
+      .then(function(r) { return r.json(); })
+      .then(function(v) { f.textContent = 'thredge \u00b7 v' + v.version + ' \u00b7 ' + v.project; })
+      .catch(function() { f.textContent = 'thredge'; });
+})();
+
 /* --- navigation -------------------------------------------------------- */
 
 (function() {

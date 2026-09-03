@@ -47,7 +47,7 @@
 
   <div id="msg" class="msg msg-err hidden"></div>
 </main>
-<footer>thredge &middot; <span id="dv-project">--</span></footer>
+<footer id="footer">thredge &middot; loading&hellip;</footer>
 
 <script src="/static/app.js"></script>
 <script>
@@ -74,8 +74,7 @@
       setText('dv-idf', p['IDF:Version']);
       setText('dv-uptime', p['System:Uptime']);
       setText('dv-heap', p['System:FreeHeap']);
-      setText('dv-project', p['App:ProjectName'], 'thredge');
-    });
+      });
   }
 
   function loadRouters() {
