@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+menu "OTBR Firmware"
+
+    config OTBR_MDNS_HOSTNAME
+        string "mDNS hostname"
+        default "esp-otbr"
+        help
+            Hostname advertised on the LAN. The Web GUI becomes reachable at
+            http://<hostname>.local once the device has joined Wi-Fi.
+
+    config OTBR_FACTORY_RESET_GPIO
+        int "Factory reset button GPIO"
+        default 28
+        help
+            GPIO of the button that clears the stored Wi-Fi credentials when
+            held. GPIO28 is the BOOT button on the ESP32-C5-DevKitC-1.
+
+    config OTBR_FACTORY_RESET_HOLD_MS
+        int "Factory reset hold time (ms)"
+        default 5000
+        help
+            How long the button must be held before Wi-Fi credentials are
+            erased and the device reboots into the setup access point.
+
+endmenu

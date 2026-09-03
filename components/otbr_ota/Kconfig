@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+menu "OTBR OTA"
+
+    config OTBR_OTA_MANIFEST_URL
+        string "Release manifest URL"
+        default "https://YOUR-GITHUB-USER.github.io/esp32c5-otbr/ota.json"
+        help
+            HTTPS URL of the JSON release manifest, e.g. published by the
+            GitHub Pages workflow of this project. Expected format:
+            {"version": "1.2.3", "url": "https://.../esp32c5_otbr.bin"}
+
+endmenu

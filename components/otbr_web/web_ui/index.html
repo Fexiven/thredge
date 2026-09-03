@@ -1,0 +1,110 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status &middot; thredge</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Status</h1>
+  <p class="lede">Your Thread border router at a glance.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Thread <span class="pill" id="th-role">--</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>Network</dt><dd id="th-name">--</dd></div>
+        <div class="row"><dt>Channel</dt><dd id="th-channel">--</dd></div>
+        <div class="row"><dt>PAN ID</dt><dd class="mono" id="th-panid">--</dd></div>
+        <div class="row"><dt>Routers</dt><dd id="th-routers">--</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Wi-Fi <span class="pill" id="wf-state">--</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>Network</dt><dd id="wf-ssid">--</dd></div>
+        <div class="row"><dt>Band</dt><dd id="wf-band">--</dd></div>
+        <div class="row"><dt>Signal</dt><dd id="wf-signal">--</dd></div>
+        <div class="row"><dt>IP address</dt><dd class="mono" id="wf-ip">--</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Device</h3>
+      <dl class="rows">
+        <div class="row"><dt>Firmware</dt><dd id="dv-version">--</dd></div>
+        <div class="row"><dt>ESP-IDF</dt><dd id="dv-idf">--</dd></div>
+        <div class="row"><dt>Uptime</dt><dd id="dv-uptime">--</dd></div>
+        <div class="row"><dt>Free memory</dt><dd id="dv-heap">--</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div id="msg" class="msg msg-err hidden"></div>
+</main>
+<footer>thredge &middot; <span id="dv-project">--</span></footer>
+
+<script src="/static/app.js"></script>
+<script>
+(function() {
+  function roleClass(role) {
+    if (!role) { return 'pill'; }
+    var r = String(role).toLowerCase();
+    if (r === 'leader' || r === 'router' || r === 'child') { return 'pill pill-ok'; }
+    if (r === 'detached' || r === 'disabled') { return 'pill pill-err'; }
+    return 'pill pill-warn';
+  }
+
+  function loadThread() {
+    return getJSON('/get_properties').then(function(d) {
+      var p = d.result || {};
+      setText('th-name', p['Network:Name']);
+      setText('th-channel', p['RCP:Channel']);
+      setText('th-panid', p['Network:PANID']);
+      var role = $('th-role');
+      role.textContent = p['Thread:Role'] || '--';
+      role.className = roleClass(p['Thread:Role']);
+
+      setText('dv-version', p['App:Version']);
+      setText('dv-idf', p['IDF:Version']);
+      setText('dv-uptime', p['System:Uptime']);
+      setText('dv-heap', p['System:FreeHeap']);
+      setText('dv-project', p['App:ProjectName'], 'thredge');
+    });
+  }
+
+  function loadRouters() {
+    return getJSON('/node').then(function(d) {
+      setText('th-routers', d.NumOfRouter);
+    });
+  }
+
+  function loadWifi() {
+    return getJSON('/api/wifi/status').then(function(d) {
+      var state = $('wf-state');
+      state.textContent = d.connected ? 'connected' : 'offline';
+      state.className = d.connected ? 'pill pill-ok' : 'pill pill-err';
+      setText('wf-ssid', d.ssid);
+      setText('wf-band', d.band);
+      setText('wf-signal', d.rssi === undefined ? null : signalWords(d.rssi) + ' (' + d.rssi + ' dBm)');
+      setText('wf-ip', d.ip);
+    });
+  }
+
+  function refresh() {
+    Promise.all([ loadThread(), loadRouters(), loadWifi() ])
+        .then(function() { clearMessage('msg'); })
+        .catch(function(e) { message('msg', 'Could not read device status: ' + e.message, 'err'); });
+  }
+
+  refresh();
+  setInterval(refresh, 10000);
+})();
+</script>
+</body>
+</html>

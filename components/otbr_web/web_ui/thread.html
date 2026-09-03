@@ -1,0 +1,439 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thread &middot; thredge</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Thread</h1>
+  <p class="lede">The mesh this router bridges onto your home network.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Network <span class="pill" id="th-role">--</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>Name</dt><dd id="th-name">--</dd></div>
+        <div class="row"><dt>Channel</dt><dd id="th-channel">--</dd></div>
+        <div class="row"><dt>PAN ID</dt><dd class="mono" id="th-panid">--</dd></div>
+        <div class="row"><dt>Extended PAN ID</dt><dd class="mono" id="th-xpanid">--</dd></div>
+        <div class="row"><dt>Partition ID</dt><dd class="mono" id="th-partition">--</dd></div>
+        <div class="row"><dt>Routers</dt><dd id="th-routers">--</dd></div>
+        <div class="row"><dt>Service</dt><dd id="th-wpan">--</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Addresses</h3>
+      <dl class="rows">
+        <div class="row"><dt>Mesh-local</dt><dd class="mono" id="ad-mesh">--</dd></div>
+        <div class="row"><dt>Routing-local</dt><dd class="mono" id="ad-rloc">--</dd></div>
+        <div class="row"><dt>Link-local</dt><dd class="mono" id="ad-link">--</dd></div>
+        <div class="row"><dt>Extended address</dt><dd class="mono" id="ad-ext">--</dd></div>
+        <div class="row"><dt>Border agent</dt><dd class="mono" id="ad-ba">--</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Radio</h3>
+      <dl class="rows">
+        <div class="row"><dt>Mode</dt><dd>Native 802.15.4</dd></div>
+        <div class="row"><dt>Channel</dt><dd id="rd-channel">--</dd></div>
+        <div class="row"><dt>Transmit power</dt><dd id="rd-txpower">--</dd></div>
+        <div class="row"><dt>EUI-64</dt><dd class="mono" id="rd-eui">--</dd></div>
+        <div class="row"><dt>OpenThread</dt><dd class="mono" id="rd-otver">--</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <h2>Active dataset</h2>
+  <div class="card">
+    <p>These are the credentials of your Thread network. Paste them into Home
+      Assistant or another border router so it joins this same mesh instead of
+      forming a separate one. Treat them like a Wi-Fi password.</p>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="reveal">Show dataset</button>
+      <button class="btn btn-secondary hidden" id="copy">Copy</button>
+    </div>
+    <div id="ds-msg" class="msg hidden"></div>
+    <pre class="mono hidden" id="ds" style="overflow-x:auto;margin-top:1rem"></pre>
+  </div>
+
+  <h2>Join an existing network</h2>
+  <div class="card">
+    <p>Paste the network's <strong>active dataset</strong>. In Home Assistant
+      that is Settings &rarr; Devices &amp; services &rarr; Thread &rarr; the
+      network's overflow menu &rarr; <em>Download credentials</em>; the long hex
+      string is what goes here. JSON works too. This is the reliable way to
+      join &mdash; a network key on its own is not enough, because Thread also
+      needs the extended PAN ID and channel to attach.</p>
+    <label for="ds-in">Active dataset (TLV hex or JSON)</label>
+    <input type="text" id="ds-in" class="mono" autocomplete="off" spellcheck="false"
+           placeholder="0e080000000000010000000300001a35060004001fffe002...">
+    <div class="btn-row">
+      <button class="btn" id="ds-join">Join with dataset</button>
+    </div>
+    <div id="join-msg" class="msg hidden"></div>
+  </div>
+
+  <h2>Join by network key</h2>
+  <div class="card">
+    <p>If you only have the network key, this discovers the mesh and builds the
+      rest of the dataset from what the scan reports. Less reliable than pasting
+      the full dataset &mdash; the mesh-local prefix and commissioner
+      credentials are left at their defaults, and the device picks them up from
+      the leader once it attaches.</p>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="discover">Discover networks</button>
+    </div>
+    <div class="aps" id="nets"></div>
+    <div class="empty" id="nets-empty">No scan yet.</div>
+
+    <div id="join-form" class="hidden">
+      <label for="join-key">Network key for <span id="join-target" class="mono"></span></label>
+      <input type="text" id="join-key" class="mono" autocomplete="off" spellcheck="false"
+             placeholder="32 hex characters" maxlength="32">
+      <div class="btn-row">
+        <button class="btn" id="join">Join network</button>
+        <button class="btn btn-secondary" id="join-cancel">Cancel</button>
+      </div>
+    </div>
+    <div id="key-msg" class="msg hidden"></div>
+  </div>
+
+  <h2>Form a new network</h2>
+  <div class="card">
+    <p>Creates a fresh Thread network on this router. Any devices already
+      commissioned to the current network will stop reaching it, so only do this
+      when you are starting over.</p>
+    <label for="f-name">Network name</label>
+    <input type="text" id="f-name" maxlength="16" autocomplete="off" spellcheck="false">
+    <label for="f-channel">Channel (11-26)</label>
+    <input type="text" id="f-channel" inputmode="numeric" autocomplete="off">
+    <label for="f-panid">PAN ID</label>
+    <input type="text" id="f-panid" class="mono" autocomplete="off" spellcheck="false" placeholder="0x1234">
+    <label for="f-xpanid">Extended PAN ID</label>
+    <input type="text" id="f-xpanid" class="mono" autocomplete="off" spellcheck="false"
+           placeholder="16 hex characters" maxlength="16">
+    <label for="f-key">Network key</label>
+    <input type="text" id="f-key" class="mono" autocomplete="off" spellcheck="false"
+           placeholder="32 hex characters" maxlength="32">
+    <label for="f-prefix">On-mesh prefix (optional)</label>
+    <input type="text" id="f-prefix" class="mono" autocomplete="off" spellcheck="false" placeholder="fd11:22::/64">
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="f-random">Generate credentials</button>
+      <button class="btn" id="f-submit">Form network</button>
+    </div>
+    <div id="form-msg" class="msg hidden"></div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+(function() {
+  var datasetText = '';
+  var refreshTimer = null;
+  var chosen = null;
+
+  function roleClass(role) {
+    var r = String(role || '').toLowerCase();
+    if (r === 'leader' || r === 'router' || r === 'child') { return 'pill pill-ok'; }
+    if (r === 'detached' || r === 'disabled') { return 'pill pill-err'; }
+    return 'pill pill-warn';
+  }
+
+  function load() {
+    getJSON('/get_properties')
+        .then(function(d) {
+          var p = d.result || {};
+          var role = $('th-role');
+          role.textContent = p['Thread:Role'] || '--';
+          role.className = roleClass(p['Thread:Role']);
+
+          setText('th-name', p['Network:Name']);
+          setText('th-channel', p['RCP:Channel']);
+          setText('th-panid', p['Network:PANID']);
+          setText('th-xpanid', p['Network:XPANID']);
+          setText('th-partition', p['Network:PartitionID']);
+          setText('th-wpan', p['WPAN service']);
+
+          setText('ad-mesh', p['IPv6:MeshLocalAddress']);
+          setText('ad-rloc', p['IPv6:RoutingLocalAddress']);
+          setText('ad-link', p['IPv6:LinkLocalAddress']);
+          setText('ad-ba', p['Network:BorderAgentID']);
+
+          setText('rd-channel', p['RCP:Channel']);
+          setText('rd-txpower', p['RCP:TxPower']);
+          setText('rd-eui', p['RCP:EUI64']);
+          setText('rd-otver', (p['OpenThread:Version'] || '').split(';')[0]);
+        })
+        .catch(function() {});
+
+    getJSON('/node')
+        .then(function(d) {
+          setText('th-routers', d.NumOfRouter);
+          setText('ad-ext', d.ExtAddress);
+        })
+        .catch(function() {});
+  }
+
+  /* Discovery and form/join block the device's single web-server task for
+   * several seconds. Background polling during that time just queues requests
+   * that get dropped, so it is paused around them. */
+  function startPolling() {
+    if (!refreshTimer) { refreshTimer = setInterval(load, 15000); }
+  }
+  function stopPolling() {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function randomHex(bytes) {
+    var a = new Uint8Array(bytes);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.prototype.map.call(a, function(b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+
+  /* --- active dataset --------------------------------------------------- */
+
+  $('reveal').addEventListener('click', function() {
+    var pre = $('ds');
+    if (!pre.classList.contains('hidden')) {
+      pre.classList.add('hidden');
+      $('copy').classList.add('hidden');
+      $('reveal').textContent = 'Show dataset';
+      return;
+    }
+    $('reveal').disabled = true;
+    getJSON('/node/dataset/active')
+        .then(function(d) {
+          datasetText = JSON.stringify(d, null, 2);
+          pre.textContent = datasetText;
+          pre.classList.remove('hidden');
+          $('copy').classList.remove('hidden');
+          $('reveal').textContent = 'Hide dataset';
+          clearMessage('ds-msg');
+        })
+        .catch(function(e) {
+          message('ds-msg', 'Could not read the dataset: ' + e.message +
+                                '. This device may not have joined a Thread network yet.',
+                  'err');
+        })
+        .then(function() { $('reveal').disabled = false; });
+  });
+
+  $('copy').addEventListener('click', function() {
+    if (!navigator.clipboard) {
+      message('ds-msg', 'This browser will not allow copying; select the text instead.', 'warn');
+      return;
+    }
+    navigator.clipboard.writeText(datasetText)
+        .then(function() { message('ds-msg', 'Dataset copied to the clipboard.', 'ok'); })
+        .catch(function() { message('ds-msg', 'Could not copy; select the text instead.', 'warn'); });
+  });
+
+  /* --- join ------------------------------------------------------------- */
+
+  /* The border router's own /join_network only writes channel, PAN ID and
+   * network key into the dataset -- not the extended PAN ID, which Thread
+   * needs to attach to an existing partition -- so a join through it never
+   * gets past "detached". Both paths below write a complete dataset through
+   * PUT /node/dataset/active instead, which requires Thread to be stopped
+   * first and started again afterwards. */
+  function applyDataset(body, contentType, msgId, what) {
+    stopPolling();
+    message(msgId, 'Stopping Thread...', 'warn');
+    return putRaw('/node/state', '"disable"', 'application/json')
+        .then(function() {
+          message(msgId, 'Writing the dataset...', 'warn');
+          return putRaw('/node/dataset/active', body, contentType);
+        })
+        .then(function() {
+          message(msgId, 'Starting Thread...', 'warn');
+          return putRaw('/node/state', '"enable"', 'application/json');
+        })
+        .then(function() {
+          message(msgId, 'Joined ' + what + '. Attaching may take a few seconds.', 'ok');
+          setTimeout(load, 8000);
+          setTimeout(load, 20000);
+        })
+        .catch(function(e) {
+          message(msgId, 'Could not join: ' + e.message, 'err');
+          /* Leave Thread running rather than stranded if a step failed. */
+          putRaw('/node/state', '"enable"', 'application/json').catch(function() {});
+        })
+        .then(function() { startPolling(); });
+  }
+
+  $('ds-join').addEventListener('click', function() {
+    var raw = $('ds-in').value.trim();
+    if (!raw) { return message('join-msg', 'Paste the dataset first.', 'err'); }
+
+    var body, type;
+    if (/^[0-9a-fA-F]+$/.test(raw)) {
+      if (raw.length % 2) { return message('join-msg', 'That hex string has an odd length.', 'err'); }
+      body = raw;
+      type = 'text/plain';
+    } else {
+      try {
+        JSON.parse(raw);
+      } catch (e) {
+        return message('join-msg', 'That is neither hex nor valid JSON.', 'err');
+      }
+      body = raw;
+      type = 'application/json';
+    }
+    $('ds-join').disabled = true;
+    applyDataset(body, type, 'join-msg', 'the network').then(function() { $('ds-join').disabled = false; });
+  });
+
+  $('discover').addEventListener('click', function() {
+    var btn = $('discover');
+    var empty = $('nets-empty');
+    btn.disabled = true;
+    btn.textContent = 'Discovering...';
+    $('nets').textContent = '';
+    $('join-form').classList.add('hidden');
+    empty.textContent = 'Listening for Thread networks, this takes about ten seconds...';
+    empty.classList.remove('hidden');
+    clearMessage('key-msg');
+    stopPolling();
+
+    getJSON('/available_network')
+        .then(function(d) {
+          var nets = d.result || [];
+          if (!nets.length) {
+            empty.textContent = 'No Thread networks found in range.';
+            return;
+          }
+          /* One entry per router; collapse to one row per network. */
+          var best = {};
+          nets.forEach(function(n) {
+            if (!best[n.ep] || n.ri > best[n.ep].ri) { best[n.ep] = n; }
+          });
+          empty.classList.add('hidden');
+          Object.keys(best)
+              .map(function(k) { return best[k]; })
+              .sort(function(a, b) { return b.ri - a.ri; })
+              .forEach(function(n) {
+                var row = el('button', 'ap');
+                row.type = 'button';
+                row.appendChild(el('span', 'ap-name', n.nn));
+                row.appendChild(el('span', 'ap-meta', 'channel ' + n.ch + ' · ' + n.pi + ' · ' +
+                                                         signalWords(n.ri)));
+                row.addEventListener('click', function() {
+                  chosen = n;
+                  $('join-target').textContent = n.nn;
+                  $('join-form').classList.remove('hidden');
+                  $('join-key').focus();
+                });
+                $('nets').appendChild(row);
+              });
+        })
+        .catch(function(e) { empty.textContent = 'Discovery failed: ' + e.message; })
+        .then(function() {
+          btn.disabled = false;
+          btn.textContent = 'Discover networks';
+          startPolling();
+        });
+  });
+
+  $('join-cancel').addEventListener('click', function() {
+    $('join-form').classList.add('hidden');
+    chosen = null;
+  });
+
+  $('join').addEventListener('click', function() {
+    var key = $('join-key').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{32}$/.test(key)) {
+      return message('key-msg', 'The network key must be exactly 32 hex characters.', 'err');
+    }
+    if (!chosen) { return message('key-msg', 'Pick a network first.', 'err'); }
+
+    /* Discovery reports the extended PAN ID as "ep" and the name as "nn";
+     * including them is the difference between attaching and sitting
+     * detached. PanId arrives as a "0x" string and has to be a number here. */
+    var dataset = {
+      NetworkKey : key,
+      NetworkName : chosen.nn,
+      ExtPanId : chosen.ep,
+      PanId : parseInt(chosen.pi, 16),
+      Channel : chosen.ch
+    };
+    $('join').disabled = true;
+    applyDataset(JSON.stringify(dataset), 'application/json', 'key-msg', chosen.nn)
+        .then(function() { $('join').disabled = false; });
+  });
+
+  /* --- form ------------------------------------------------------------- */
+
+  $('f-random').addEventListener('click', function() {
+    $('f-key').value = randomHex(16);
+    $('f-xpanid').value = randomHex(8);
+    /* Valid PAN IDs are 0x0000-0xfffe; 0xffff is the broadcast value. */
+    var pan;
+    do { pan = randomHex(2); } while (pan === 'ffff');
+    $('f-panid').value = '0x' + pan;
+    if (!$('f-name').value) { $('f-name').value = 'thredge'; }
+    if (!$('f-channel').value) { $('f-channel').value = '15'; }
+    clearMessage('form-msg');
+  });
+
+  $('f-submit').addEventListener('click', function() {
+    var name = $('f-name').value.trim();
+    var channel = parseInt($('f-channel').value, 10);
+    var panid = $('f-panid').value.trim().toLowerCase();
+    var xpanid = $('f-xpanid').value.trim().toLowerCase();
+    var key = $('f-key').value.trim().toLowerCase();
+    var prefix = $('f-prefix').value.trim();
+
+    if (!name) { return message('form-msg', 'Give the network a name.', 'err'); }
+    if (!(channel >= 11 && channel <= 26)) {
+      return message('form-msg', 'Channel must be between 11 and 26.', 'err');
+    }
+    if (!/^0x[0-9a-f]{1,4}$/.test(panid)) {
+      return message('form-msg', 'PAN ID must look like 0x1234.', 'err');
+    }
+    if (!/^[0-9a-f]{16}$/.test(xpanid)) {
+      return message('form-msg', 'Extended PAN ID must be exactly 16 hex characters.', 'err');
+    }
+    if (!/^[0-9a-f]{32}$/.test(key)) {
+      return message('form-msg', 'Network key must be exactly 32 hex characters.', 'err');
+    }
+
+    var btn = $('f-submit');
+    btn.disabled = true;
+    message('form-msg', 'Forming ' + name + '...', 'warn');
+    stopPolling();
+    var payload = {
+      networkName : name,
+      channel : channel,
+      panId : panid,
+      extPanId : xpanid,
+      networkKey : key,
+      defaultRoute : 0
+    };
+    if (prefix) { payload.prefix = prefix; }
+
+    postJSON('/form_network', payload)
+        .then(function(d) {
+          message('form-msg', d.message || 'Network formed.', 'ok');
+          setTimeout(load, 6000);
+        })
+        .catch(function(e) { message('form-msg', 'Could not form the network: ' + e.message, 'err'); })
+        .then(function() {
+          btn.disabled = false;
+          startPolling();
+        });
+  });
+
+  load();
+  startPolling();
+})();
+</script>
+</body>
+</html>

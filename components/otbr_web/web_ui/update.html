@@ -1,0 +1,131 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update &middot; thredge</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Update</h1>
+  <p class="lede">Install new firmware. Your Wi-Fi settings and Thread network
+    are kept across updates.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Running firmware</h3>
+      <dl class="rows">
+        <div class="row"><dt>Version</dt><dd id="ot-version">--</dd></div>
+        <div class="row"><dt>Project</dt><dd id="ot-project">--</dd></div>
+        <div class="row"><dt>ESP-IDF</dt><dd id="ot-idf">--</dd></div>
+        <div class="row"><dt>Latest release</dt><dd id="ot-latest">not checked</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Install the latest release</h3>
+      <p>Checks the project's release feed over the internet, then downloads and
+        installs it. The device restarts when it is done.</p>
+      <div class="btn-row">
+        <button class="btn" id="check">Check for updates</button>
+        <button class="btn hidden" id="install">Install update</button>
+      </div>
+      <div id="check-msg" class="msg hidden"></div>
+    </div>
+  </div>
+
+  <h2>Install a file</h2>
+  <div class="card">
+    <p>Upload a firmware <code>.bin</code> you downloaded yourself, for example a
+      pre-release build.</p>
+    <label for="file">Firmware image</label>
+    <input type="file" id="file" accept=".bin">
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="upload">Upload &amp; install</button>
+    </div>
+    <progress id="bar" class="hidden" max="100" value="0"></progress>
+    <div id="upload-msg" class="msg hidden"></div>
+  </div>
+
+  <p class="empty">If new firmware fails to start, the device returns to the
+    previous version automatically on the next restart.</p>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+(function() {
+  getJSON('/api/ota/version')
+      .then(function(v) {
+        setText('ot-version', v.version);
+        setText('ot-project', v.project);
+        setText('ot-idf', v.idf);
+      })
+      .catch(function() { setText('ot-version', null, 'unknown'); });
+
+  $('check').addEventListener('click', function() {
+    var btn = $('check');
+    btn.disabled = true;
+    message('check-msg', 'Checking for updates...', 'warn');
+    getJSON('/api/ota/check')
+        .then(function(d) {
+          setText('ot-latest', d.latest);
+          if (d.update_available) {
+            $('install').classList.remove('hidden');
+            message('check-msg', 'Version ' + d.latest + ' is available. You are running ' + d.current + '.', 'ok');
+          } else {
+            message('check-msg', 'Up to date, running the latest version (' + d.current + ').', 'ok');
+          }
+        })
+        .catch(function(e) { message('check-msg', 'Update check failed: ' + e.message, 'err'); })
+        .then(function() { btn.disabled = false; });
+  });
+
+  $('install').addEventListener('click', function() {
+    var btn = $('install');
+    btn.disabled = true;
+    message('check-msg', 'Downloading and installing. The device restarts when it is done.', 'warn');
+    fetch('/api/ota/install', {method : 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.error) { throw new Error(d.error); }
+          message('check-msg', d.status, 'ok');
+        })
+        .catch(function(e) {
+          message('check-msg', 'Install failed: ' + e.message, 'err');
+          btn.disabled = false;
+        });
+  });
+
+  $('upload').addEventListener('click', function() {
+    var f = $('file').files[0];
+    if (!f) {
+      message('upload-msg', 'Choose a .bin file first.', 'err');
+      return;
+    }
+    var bar = $('bar');
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ota/update');
+    bar.classList.remove('hidden');
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) { bar.value = (e.loaded / e.total) * 100; }
+    };
+    xhr.onload = function() {
+      try {
+        var d = JSON.parse(xhr.responseText);
+        message('upload-msg', xhr.status === 200 ? d.status : (d.error || 'Upload failed.'),
+                xhr.status === 200 ? 'ok' : 'err');
+      } catch (err) {
+        message('upload-msg', 'Upload failed.', 'err');
+      }
+    };
+    xhr.onerror = function() { message('upload-msg', 'Upload failed, connection lost.', 'err'); };
+    message('upload-msg', 'Uploading ' + f.name + '...', 'warn');
+    xhr.send(f);
+  });
+})();
+</script>
+</body>
+</html>

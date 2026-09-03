@@ -1,0 +1,16 @@
+# ESP32-C5 OTBR — 8 MB flash layout (dual OTA)
+#
+# The web UI is embedded in the app rather than living in a SPIFFS partition,
+# so an OTA update carries the pages with it and the bootloader's rollback
+# covers everything that was written. NVS holds Wi-Fi credentials and the
+# Thread dataset, so both survive an update.
+#
+# IMPORTANT: never change this layout after a public release — OTA can replace
+# the app, but never the partition table.
+#
+# Name,       Type, SubType, Offset,   Size,     Flags
+nvs,          data, nvs,     ,         0x10000,
+otadata,      data, ota,     ,         0x2000,
+phy_init,     data, phy,     ,         0x1000,
+ota_0,        app,  ota_0,   0x20000,  0x3A0000,
+ota_1,        app,  ota_1,   ,         0x3A0000,

@@ -1,0 +1,156 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wi-Fi &middot; thredge</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Wi-Fi</h1>
+  <p class="lede">The border router reaches your network over Wi-Fi. Changing it
+    here reconnects the device; your Thread network is unaffected.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Current connection <span class="pill" id="wf-state">--</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>Network</dt><dd id="wf-ssid">--</dd></div>
+        <div class="row"><dt>Band</dt><dd id="wf-band">--</dd></div>
+        <div class="row"><dt>Channel</dt><dd id="wf-channel">--</dd></div>
+        <div class="row"><dt>Signal</dt><dd id="wf-signal">--</dd></div>
+        <div class="row"><dt>Security</dt><dd id="wf-security">--</dd></div>
+        <div class="row"><dt>IP address</dt><dd class="mono" id="wf-ip">--</dd></div>
+        <div class="row"><dt>Gateway</dt><dd class="mono" id="wf-gw">--</dd></div>
+        <div class="row"><dt>MAC</dt><dd class="mono" id="wf-mac">--</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Change network</h3>
+      <p>Pick a network below, or type its name. The device reconnects
+        immediately, so this page may go offline for a few seconds.</p>
+      <label for="ssid">Network name</label>
+      <input type="text" id="ssid" autocomplete="off" spellcheck="false" placeholder="Your Wi-Fi network">
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="off" placeholder="Leave empty for an open network">
+      <div class="btn-row">
+        <button class="btn" id="save">Save &amp; reconnect</button>
+      </div>
+      <div id="save-msg" class="msg hidden"></div>
+    </div>
+  </div>
+
+  <h2>Wi-Fi band</h2>
+  <div class="card">
+    <p>The XIAO ESP32-C5 has one antenna shared between Wi-Fi and Thread. Wi-Fi
+      on 5 GHz keeps the 2.4 GHz radio free for Thread; if the router uses one
+      name for both bands (band steering), it may still put the device on
+      2.4 GHz -- forcing 5 GHz here overrides that.</p>
+    <label for="band">Which bands to use</label>
+    <select id="band">
+      <option value="auto">Both bands (let the router decide)</option>
+      <option value="5g_only">5 GHz only -- recommended</option>
+      <option value="2g_only">2.4 GHz only</option>
+    </select>
+    <p class="empty" id="band-current" style="margin-top:0.6rem">--</p>
+    <div class="btn-row">
+      <button class="btn" id="band-save">Save &amp; reconnect</button>
+    </div>
+    <div id="band-msg" class="msg hidden"></div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+(function() {
+  function loadStatus() {
+    getJSON('/api/wifi/status')
+        .then(function(d) {
+          var state = $('wf-state');
+          state.textContent = d.connected ? 'connected' : 'offline';
+          state.className = d.connected ? 'pill pill-ok' : 'pill pill-err';
+          setText('wf-ssid', d.ssid);
+          setText('wf-band', d.band);
+          setText('wf-channel', d.channel);
+          setText('wf-signal', d.rssi === undefined ? null : signalWords(d.rssi) + ' (' + d.rssi + ' dBm)');
+          setText('wf-security', d.security);
+          setText('wf-ip', d.ip);
+          setText('wf-gw', d.gateway);
+          setText('wf-mac', d.mac);
+          if (d.ssid && !$('ssid').value) { $('ssid').value = d.ssid; }
+        })
+        .catch(function() { /* transient during a reconnect; next tick retries */ });
+  }
+
+  $('save').addEventListener('click', function() {
+    var ssid = $('ssid').value.trim();
+    if (!ssid) {
+      message('save-msg', 'Enter a network name first.', 'err');
+      return;
+    }
+    var btn = $('save');
+    btn.disabled = true;
+    message('save-msg', 'Saving and reconnecting...', 'warn');
+    postJSON('/api/wifi/config', {ssid : ssid, password : $('password').value})
+        .then(function(d) {
+          message('save-msg', d.status, 'ok');
+          /* The device drops this connection as it reassociates, so give it a
+           * moment before polling again. */
+          setTimeout(loadStatus, 8000);
+        })
+        .catch(function(e) { message('save-msg', 'Could not save: ' + e.message, 'err'); })
+        .then(function() { btn.disabled = false; });
+  });
+
+  loadStatus();
+  setInterval(loadStatus, 10000);
+
+  function bandLabel(mode) {
+    switch (mode) {
+    case '5g_only': return '5 GHz only';
+    case '2g_only': return '2.4 GHz only';
+    default:        return 'both bands';
+    }
+  }
+
+  function loadBand() {
+    getJSON('/api/wifi/band')
+        .then(function(d) {
+          $('band').value = d.preference || 'auto';
+          if (d.current_band) {
+            $('band-current').textContent = 'Currently connected on ' + d.current_band +
+                                            ' (channel ' + d.current_channel + '). ' +
+                                            'Preference: ' + bandLabel(d.preference) + '.';
+          } else {
+            $('band-current').textContent = 'Preference: ' + bandLabel(d.preference) +
+                                            '. Not currently connected.';
+          }
+        })
+        .catch(function() { /* leave the select at its default */ });
+  }
+
+  $('band-save').addEventListener('click', function() {
+    var mode = $('band').value;
+    var btn = $('band-save');
+    btn.disabled = true;
+    message('band-msg', 'Saving and reconnecting...', 'warn');
+    postJSON('/api/wifi/band', {mode : mode})
+        .then(function(d) {
+          message('band-msg', d.status, 'ok');
+          /* Wi-Fi is torn down and brought back up, so give it a moment before
+           * asking again. */
+          setTimeout(function() { loadStatus(); loadBand(); }, 8000);
+        })
+        .catch(function(e) { message('band-msg', 'Could not save: ' + e.message, 'err'); })
+        .then(function() { btn.disabled = false; });
+  });
+
+  loadBand();
+})();
+</script>
+</body>
+</html>

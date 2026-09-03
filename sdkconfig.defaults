@@ -1,0 +1,121 @@
+# ESP32-C5 single-chip OpenThread Border Router — project defaults
+# Based on esp-thread-br/examples/basic_thread_border_router, adapted for
+# the ESP32-C5 native 802.15.4 radio (no external RCP) plus OTA.
+
+CONFIG_IDF_TARGET="esp32c5"
+
+#
+# Serial flasher / console (matches upstream esp32c5 defaults)
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# XIAO ESP32-C5 has no USB-UART bridge: the USB-C port is the chip's own
+# USB Serial/JTAG peripheral. Putting the console there is what makes the
+# OpenThread CLI (`br state`, `dataset ...`) reachable over the same cable
+# used for flashing. On a DevKitC-1 use CONFIG_ESP_CONSOLE_UART_DEFAULT=y.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+#
+# Partition table
+#
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+CONFIG_PARTITION_TABLE_MD5=y
+
+#
+# OTA safety: new images boot in pending-verify state and roll back
+# automatically unless the app confirms itself (see otbr_ota component).
+#
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+#
+# Compiler / newlib
+#
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_LIBC_NEWLIB_NANO_FORMAT=y
+
+#
+# mbedTLS — DTLS/ECJPAKE for Thread commissioning, cert bundle for
+# HTTPS OTA downloads from GitHub.
+#
+CONFIG_MBEDTLS_CMAC_C=y
+CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
+CONFIG_MBEDTLS_KEY_EXCHANGE_ECJPAKE=y
+CONFIG_MBEDTLS_ECJPAKE_C=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+
+#
+# OpenThread — native on-chip 802.15.4 radio (the key ESP32-C5 setting)
+#
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_BORDER_ROUTER=y
+CONFIG_OPENTHREAD_RADIO_NATIVE=y
+CONFIG_OPENTHREAD_TASK_SIZE=8192
+
+#
+# ESP Thread Border Router example options (from the thread_border_router
+# component): standalone board, auto start, Web GUI, SoftAP Wi-Fi setup
+# (captive portal at http://192.168.4.1 when no credentials are stored).
+#
+CONFIG_ESP_BR_BOARD_STANDALONE=y
+CONFIG_OPENTHREAD_BR_AUTO_START=y
+CONFIG_OPENTHREAD_BR_START_WEB=y
+CONFIG_OPENTHREAD_BR_SOFTAP_SETUP=y
+
+# No external RCP on the C5 — make sure the RCP auto-update machinery is off.
+CONFIG_AUTO_UPDATE_RCP=n
+
+#
+# Backbone connection: Wi-Fi. The SSID/password below are only a fallback
+# used if SoftAP setup is disabled; normal provisioning happens via the
+# captive portal and is stored in NVS.
+#
+CONFIG_EXAMPLE_CONNECT_WIFI=y
+CONFIG_EXAMPLE_WIFI_SSID="CHANGE-ME"
+CONFIG_EXAMPLE_WIFI_PASSWORD="CHANGE-ME"
+
+#
+# lwIP — IPv6 forwarding / border routing hooks (from upstream defaults)
+#
+CONFIG_LWIP_IPV6_FORWARD=y
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=12
+CONFIG_LWIP_MULTICAST_PING=y
+CONFIG_LWIP_NETIF_STATUS_CALLBACK=y
+CONFIG_LWIP_HOOK_IP6_ROUTE_DEFAULT=y
+CONFIG_LWIP_HOOK_ND6_GET_GW_DEFAULT=y
+CONFIG_LWIP_HOOK_IP6_INPUT_CUSTOM=y
+CONFIG_LWIP_IPV6_AUTOCONFIG=y
+CONFIG_LWIP_HOOK_IP6_SELECT_SRC_ADDR_CUSTOM=y
+CONFIG_LWIP_FORCE_ROUTER_FORWARDING=y
+
+#
+# mDNS — service advertisement for HomePod/Google/HA discovery
+#
+CONFIG_MDNS_MULTIPLE_INSTANCE=y
+CONFIG_MDNS_MAX_SERVICES=200
+
+#
+# System
+#
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3584
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=5120
+
+#
+# HTTP server (Web GUI + captive portal + OTA endpoints)
+#
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# The web server draws max_open_sockets + 3 from this pool -- httpd reserves
+# 3 internally for the listener and its control socket pair -- so at the IDF
+# default of 10 it claims the entire pool on its own, leaving nothing for
+# mDNS, OpenThread's UDP sockets, or the outbound TLS connection that fetches
+# the update manifest (which failed with accept errno 23, ENFILE).
+CONFIG_LWIP_MAX_SOCKETS=24
+
+#
+# OTA — where the device looks for new releases. Published to GitHub Pages
+# by .github/workflows/release.yml on every tag.
+#
+CONFIG_OTBR_OTA_MANIFEST_URL="https://fexiven.github.io/thredge/ota.json"

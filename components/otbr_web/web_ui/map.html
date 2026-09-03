@@ -1,0 +1,192 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map &middot; thredge</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .map-wrap { position: relative; }
+  svg.map { width: 100%; height: auto; display: block; touch-action: none; }
+  .edge { stroke: var(--muted); fill: none; }
+  .child-edge { stroke: var(--line); fill: none; }
+  .node { stroke: var(--line); stroke-width: 1.5; fill: var(--surface); }
+  .node-leader { fill: var(--accent); stroke: var(--accent); }
+  .node-self { stroke: var(--accent); stroke-width: 3; }
+  .child { fill: var(--muted); stroke: var(--surface); stroke-width: 1.5; }
+  .nlabel { fill: var(--ink); font: 600 13px ui-sans-serif, system-ui, sans-serif; text-anchor: middle; }
+  .nlabel-leader { fill: var(--accent-ink); }
+  .nsub { fill: var(--muted); font: 11px ui-monospace, Menlo, monospace; text-anchor: middle; }
+  .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 1rem; color: var(--muted); font-size: 0.85rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1.5px solid var(--line); }
+  .dot-leader { background: var(--accent); border-color: var(--accent); }
+  .dot-router { background: var(--surface); }
+  .dot-self { background: var(--surface); border: 3px solid var(--accent); }
+  .dot-child { background: var(--muted); width: 9px; height: 9px; }
+</style>
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Network map</h1>
+  <p class="lede">The Thread mesh this router is part of. Routers are linked by
+    radio; end devices hang off the router they joined through.</p>
+
+  <div class="card">
+    <div class="flex-between" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+      <div class="muted" id="map-summary" style="font-size:0.9rem">Loading the mesh...</div>
+      <button class="btn btn-secondary" id="refresh">Refresh</button>
+    </div>
+    <div class="map-wrap">
+      <svg class="map" id="map" viewBox="0 0 640 460" role="img" aria-label="Thread network map"></svg>
+    </div>
+    <div id="map-msg" class="msg hidden"></div>
+    <div class="legend">
+      <span><span class="dot dot-leader"></span> Leader</span>
+      <span><span class="dot dot-router"></span> Router</span>
+      <span><span class="dot dot-self"></span> This device</span>
+      <span><span class="dot dot-child"></span> End device</span>
+    </div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+(function() {
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var W = 640, H = 460, CX = W / 2, CY = H / 2 + 8;
+  var selfRloc = null;
+
+  function svg(tag, attrs) {
+    var n = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) { n.setAttribute(k, attrs[k]); }
+    return n;
+  }
+  function ridOf(rloc) { return rloc >> 10; }
+
+  function edgeWidth(q) { return q >= 3 ? 3 : q === 2 ? 2 : 1; }
+  function edgeOpacity(q) { return q >= 3 ? 0.9 : q === 2 ? 0.6 : 0.3; }
+
+  function render(nodes) {
+    var map = $('map');
+    while (map.firstChild) { map.removeChild(map.firstChild); }
+
+    if (!nodes.length) {
+      $('map-summary').textContent = 'Not attached to a Thread network yet.';
+      return;
+    }
+
+    var leaderId = null;
+    nodes.forEach(function(n) {
+      if (n.LeaderData && typeof n.LeaderData.LeaderRouterId === 'number') { leaderId = n.LeaderData.LeaderRouterId; }
+    });
+
+    // Index routers by their router id and place them on a circle.
+    var byId = {};
+    nodes.forEach(function(n) { n._rid = ridOf(n.Rloc16); byId[n._rid] = n; });
+    var R = nodes.length === 1 ? 0 : Math.min(W, H) / 2 - 90;
+    nodes.forEach(function(n, i) {
+      var a = -Math.PI / 2 + (2 * Math.PI * i) / nodes.length;
+      n._x = CX + R * Math.cos(a);
+      n._y = CY + R * Math.sin(a);
+    });
+
+    // Router-to-router links, de-duplicated, quality = best of the two directions.
+    var seen = {};
+    nodes.forEach(function(n) {
+      var rd = (n.Route && n.Route.RouteData) || [];
+      rd.forEach(function(r) {
+        var other = byId[r.RouteId];
+        if (!other || r.RouteId === n._rid) { return; }
+        var q = Math.max(r.LinkQualityIn || 0, r.LinkQualityOut || 0);
+        if (q <= 0) { return; }
+        var key = Math.min(n._rid, r.RouteId) + '-' + Math.max(n._rid, r.RouteId);
+        if (seen[key] && seen[key] >= q) { return; }
+        seen[key] = q;
+      });
+    });
+    Object.keys(seen).forEach(function(key) {
+      var ids = key.split('-'), a = byId[ids[0]], b = byId[ids[1]], q = seen[key];
+      if (!a || !b) { return; }
+      map.appendChild(svg('line', {
+        'class' : 'edge', x1 : a._x, y1 : a._y, x2 : b._x, y2 : b._y,
+        'stroke-width' : edgeWidth(q), 'stroke-opacity' : edgeOpacity(q)
+      }));
+    });
+
+    // Children as satellites around their parent router.
+    nodes.forEach(function(n) {
+      var kids = n.ChildTable || [];
+      kids.forEach(function(c, j) {
+        var a = -Math.PI / 2 + (2 * Math.PI * j) / Math.max(kids.length, 1);
+        var cx = n._x + 46 * Math.cos(a), cy = n._y + 46 * Math.sin(a);
+        map.appendChild(svg('line', {'class' : 'child-edge', x1 : n._x, y1 : n._y, x2 : cx, y2 : cy}));
+        var dot = svg('circle', {'class' : 'child', cx : cx, cy : cy, r : 6});
+        var kr = (c.Rloc16 !== undefined) ? c.Rloc16 : null;
+        if (kr !== null) {
+          var t = document.createElementNS(SVGNS, 'title');
+          t.textContent = '0x' + kr.toString(16);
+          dot.appendChild(t);
+        }
+        map.appendChild(dot);
+      });
+    });
+
+    // Routers on top.
+    nodes.forEach(function(n) {
+      var isLeader = (n._rid === leaderId);
+      var isSelf = (selfRloc !== null && n.Rloc16 === selfRloc);
+      var cls = 'node' + (isLeader ? ' node-leader' : '') + (isSelf ? ' node-self' : '');
+      var g = svg('g', {});
+      g.appendChild(svg('circle', {'class' : cls, cx : n._x, cy : n._y, r : 22}));
+      var lbl = svg('text', {'class' : 'nlabel' + (isLeader ? ' nlabel-leader' : ''), x : n._x, y : n._y + 1});
+      lbl.textContent = String(n._rid);
+      g.appendChild(lbl);
+      var sub = svg('text', {'class' : 'nsub', x : n._x, y : n._y + 38});
+      sub.textContent = '0x' + n.Rloc16.toString(16);
+      g.appendChild(sub);
+      var title = document.createElementNS(SVGNS, 'title');
+      title.textContent = 'Router ' + n._rid + '  (0x' + n.Rloc16.toString(16) + ')\n' +
+                          (n.ExtAddress || '') + (isLeader ? '\nleader' : '') + (isSelf ? '\nthis device' : '');
+      g.appendChild(title);
+      map.appendChild(g);
+    });
+
+    var routers = nodes.length;
+    var children = nodes.reduce(function(a, n) { return a + ((n.ChildTable || []).length); }, 0);
+    $('map-summary').textContent =
+        routers + ' router' + (routers === 1 ? '' : 's') +
+        (children ? ', ' + children + ' end device' + (children === 1 ? '' : 's') : '') +
+        (leaderId !== null ? ' · leader is router ' + leaderId : '');
+  }
+
+  function load() {
+    var btn = $('refresh');
+    btn.disabled = true;
+    btn.textContent = 'Querying...';
+    clearMessage('map-msg');
+    $('map-summary').textContent = 'Querying the mesh, this takes a few seconds...';
+
+    // Learn our own RLOC first so the map can mark "this device".
+    getJSON('/node').then(function(d) { selfRloc = d.Rloc16; }).catch(function() {})
+        .then(function() { return getJSON('/topology'); })
+        .then(function(d) { render(d.result || []); })
+        .catch(function(e) {
+          $('map-summary').textContent = '';
+          message('map-msg', 'Could not read the topology: ' + e.message +
+                                 '. The device may not have joined a network yet.', 'err');
+        })
+        .then(function() {
+          btn.disabled = false;
+          btn.textContent = 'Refresh';
+        });
+  }
+
+  $('refresh').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

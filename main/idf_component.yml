@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+## IDF Component Manager manifest
+## Components under third_party/esp-thread-br come from the git submodule so
+## that the SoftAP setup + launch code and the CLI extension always match.
+dependencies:
+  espressif/mdns: "^1.0.0"
+  espressif/esp_rcp_update:
+    version: "~1.6.0"
+
+  esp_ot_cli_extension:
+    path: ../third_party/esp-thread-br/components/esp_ot_cli_extension
+  esp_ot_br_server:
+    path: ../third_party/esp-thread-br/components/esp_ot_br_server
+  thread_border_router:
+    path: ../third_party/esp-thread-br/examples/common/thread_border_router
+
+  protocol_examples_common:
+    path: ${IDF_PATH}/examples/common_components/protocol_examples_common
+  ot_examples_common:
+    path: ${IDF_PATH}/examples/openthread/ot_common_components/ot_examples_common
+
+  idf:
+    version: ">=5.5.2"  # ot_examples_common only exists from v5.5.2; CI builds v6.0.3

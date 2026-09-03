@@ -1,0 +1,86 @@
+diff --git a/components/esp_ot_br_server/CMakeLists.txt b/components/esp_ot_br_server/CMakeLists.txt
+index 988c1b6..1b4229f 100644
+--- a/components/esp_ot_br_server/CMakeLists.txt
++++ b/components/esp_ot_br_server/CMakeLists.txt
+@@ -14,4 +14,6 @@ idf_component_register(
+     EMBED_TXTFILES "frontend/wifi_configuration.html"
+ )
+ 
+-spiffs_create_partition_image(web_storage ${CMAKE_CURRENT_SOURCE_DIR}/frontend FLASH_IN_PROJECT)
++# Disabled: this project builds the web_storage image from its own UI in
++# components/otbr_web/web_ui. Two generators for one partition would clash.
++# spiffs_create_partition_image(web_storage ${CMAKE_CURRENT_SOURCE_DIR}/frontend FLASH_IN_PROJECT)
+diff --git a/components/esp_ot_br_server/include/esp_br_web.h b/components/esp_ot_br_server/include/esp_br_web.h
+index 1e9b814..a9b4bf5 100644
+--- a/components/esp_ot_br_server/include/esp_br_web.h
++++ b/components/esp_ot_br_server/include/esp_br_web.h
+@@ -10,6 +10,7 @@
+ #include <stddef.h>
+ 
+ #include "esp_event.h"
++#include "esp_http_server.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -35,6 +36,19 @@ bool esp_br_web_is_server_started(void);
+  */
+ void esp_br_web_start(char *base_path);
+ 
++/**
++ * @brief Hook for registering additional application URIs on the border router
++ * web server.
++ *
++ * Called once the server's own handlers are registered and before its
++ * catch-all GET handler, so application routes take precedence over the
++ * static-file fallback. The default implementation does nothing; define this
++ * symbol in an application component to add routes.
++ *
++ * @param[in] server Handle of the running border router web server
++ */
++void esp_br_web_register_extra_uris(httpd_handle_t server);
++
+ /** Size of an ePSKc TAP string buffer: 8 digits + checksum digit + '\0' */
+ #define ESP_BR_EPSKC_TAP_LEN 10
+ 
+diff --git a/components/esp_ot_br_server/src/esp_br_web.c b/components/esp_ot_br_server/src/esp_br_web.c
+index 7b5ec5c..c60a02b 100644
+--- a/components/esp_ot_br_server/src/esp_br_web.c
++++ b/components/esp_ot_br_server/src/esp_br_web.c
+@@ -1500,8 +1500,10 @@ static httpd_handle_t *start_esp_br_http_server(const char *base_path)
+     strlcpy(s_server.data.base_path, base_path, ESP_VFS_PATH_MAX + 1);
+ 
+     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+-    config.max_uri_handlers = (sizeof(s_resource_handlers) + sizeof(s_web_gui_handlers)) / sizeof(httpd_uri_t) + 2;
+-    config.max_resp_headers = (sizeof(s_resource_handlers) + sizeof(s_web_gui_handlers)) / sizeof(httpd_uri_t) + 2;
++    /* +24 rather than +2: the catch-all plus headroom for routes added by
++     * esp_br_web_register_extra_uris(). */
++    config.max_uri_handlers = (sizeof(s_resource_handlers) + sizeof(s_web_gui_handlers)) / sizeof(httpd_uri_t) + 24;
++    config.max_resp_headers = (sizeof(s_resource_handlers) + sizeof(s_web_gui_handlers)) / sizeof(httpd_uri_t) + 24;
+     config.uri_match_fn = httpd_uri_match_wildcard;
+     config.stack_size = 8 * 1024;
+     config.max_open_sockets = 7;
+@@ -1520,6 +1522,11 @@ static httpd_handle_t *start_esp_br_http_server(const char *base_path)
+ 
+     httpd_server_register_http_uri(&s_server, s_resource_handlers, sizeof(s_resource_handlers) / sizeof(httpd_uri_t));
+     httpd_server_register_http_uri(&s_server, s_web_gui_handlers, sizeof(s_web_gui_handlers) / sizeof(httpd_uri_t));
++
++    /* Application routes go in before the catch-all, so they are matched
++     * ahead of the static-file fallback. */
++    esp_br_web_register_extra_uris(s_server.handle);
++
+     httpd_register_uri_handler(s_server.handle, &default_uris_get);
+ 
+     return s_server.handle;
+@@ -1636,6 +1643,12 @@ static void handler_got_ip6_event(void *arg, esp_event_base_t event_base, int32_
+ }
+ #endif
+ 
++/* No-op unless an application component defines its own. */
++__attribute__((weak)) void esp_br_web_register_extra_uris(httpd_handle_t server)
++{
++    (void)server;
++}
++
+ void esp_br_web_start(char *base_path)
+ {
+     ESP_ERROR_CHECK(mdns_register_hostname_changed_callback(mdns_hostname_changed_callback, NULL));
