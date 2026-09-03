@@ -1,0 +1,15 @@
+{
+  "name": "ESP32-C5 Thread Border Router",
+  "version": "{{VERSION}}",
+  "home_assistant_domain": "otbr",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C5",
+      "parts": [
+        { "path": "otbr-merged.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

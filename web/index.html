@@ -1,0 +1,97 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-C5 Thread Border Router — installer</title>
+<meta name="description" content="Install the open-source Thread Border Router firmware on an ESP32-C5 straight from your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #20241f;
+    --muted: #66705f;
+    --line: #d9ddd2;
+    --accent: #2f6d3f;
+    --paper: #f6f6f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 36rem; margin: 0 auto; padding: 3.5rem 1.25rem 5rem; }
+  h1 { font-size: 1.7rem; font-weight: 600; line-height: 1.25; margin: 0 0 0.75rem; }
+  .lede { color: var(--muted); margin: 0 0 2.25rem; max-width: 32rem; }
+  .install-box {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+  .install-box p { margin: 0 0 1rem; }
+  /* esp-web-tools v10 exposes no ::part(); style a slotted button instead. */
+  .install-btn {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 6px;
+    padding: 0.6rem 1.4rem;
+    font-family: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .install-btn:hover { filter: brightness(1.08); }
+  .notice {
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    background: #fdf3e3;
+    border: 1px solid #e8d7b4;
+    font-size: 0.92rem;
+  }
+  ol { padding-left: 1.25rem; margin: 0 0 2.5rem; }
+  ol li { margin-bottom: 0.9rem; }
+  ol li::marker { color: var(--accent); font-weight: 600; }
+  h2 { font-size: 1.05rem; font-weight: 600; margin: 2rem 0 0.5rem; }
+  .fine { color: var(--muted); font-size: 0.92rem; }
+  a { color: var(--accent); }
+  code { background: #ebeee6; border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.92em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Turn an ESP32-C5 into a Thread Border Router</h1>
+  <p class="lede">One chip bridges your Thread devices onto your home network — Wi-Fi on 5&nbsp;GHz, Thread on the built-in 802.15.4 radio. Works with Home Assistant, Matter and anything that speaks Thread.</p>
+
+  <div class="install-box">
+    <p>Plug the board into this computer with a USB data cable, then:</p>
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate" class="install-btn">Install firmware</button>
+      <p slot="unsupported" class="notice">Your browser can't talk to serial devices. Open this page in desktop Chrome or Edge.</p>
+      <p slot="not-allowed" class="notice">This page has to be served over HTTPS to flash a device.</p>
+    </esp-web-install-button>
+    <p class="fine">Needs Chrome or Edge on desktop. Choose the board's serial port when asked.</p>
+  </div>
+
+  <ol>
+    <li><strong>Install</strong> — the button above flashes the latest release over USB. Choose "Erase device" on a first install.</li>
+    <li><strong>Connect it to Wi-Fi</strong> — after flashing, the device broadcasts a network named <code>ESP-ThreadBR-XXXX</code>. Join it with your phone and a setup page opens (or visit <code>http://192.168.4.1</code>). Pick your home network — the 5&nbsp;GHz one if you have it.</li>
+    <li><strong>Done</strong> — the border router starts and forms a Thread network. Manage it at <code>http://esp-otbr.local</code> — firmware updates live on the <strong>Update</strong> tab there.</li>
+  </ol>
+
+  <h2>Joining an existing Thread network</h2>
+  <p class="fine">Running Home Assistant or another border router already? Copy your Thread network's active dataset (in HA: Settings → Devices → Thread) and paste it in the device's web interface so it extends your existing mesh instead of creating a new one.</p>
+
+  <h2>Something not working?</h2>
+  <p class="fine">If the serial port doesn't show up, try another cable &mdash; many USB-C cables are charge-only and carry no data lines. To start over, hold the BOOT button for five seconds — the setup network reappears. Bugs and questions: <a href="https://github.com/{{REPO}}">the project on GitHub</a>.</p>
+</main>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</body>
+</html>

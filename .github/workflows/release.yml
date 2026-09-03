@@ -1,0 +1,94 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    # Calendar versioning, always three parts: 2026.09.0, 2026.09.1, 2026.10.0
+    # (a leading "v" is optional and is stripped from the firmware version)
+    tags: ["v*", "[0-9]*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with esp-thread-br submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Apply esp-thread-br patches
+        run: ./scripts/apply-patches.sh
+
+      # PROJECT_VER comes from version.txt, so this must run before the build.
+      - name: Stamp firmware version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "${GITHUB_REF_NAME#v}" > version.txt
+
+      # v5.5.2 is the floor: earlier releases have no
+      # examples/openthread/ot_common_components/ot_examples_common, which the
+      # border router component depends on, and dependency solving fails.
+      - name: Build firmware (ESP-IDF v6.0.3)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.3
+          target: esp32c5
+          command: idf.py set-target esp32c5 build && idf.py merge-bin -o otbr-merged.bin
+
+      - name: Assemble Pages site (flasher + manifests)
+        run: |
+          VERSION="$(tr -d '[:space:]' < version.txt)"
+          mkdir -p site
+          sed -e "s|{{REPO}}|${{ github.repository }}|g" web/index.html > site/index.html
+          sed -e "s|{{VERSION}}|${VERSION}|g" web/manifest.template.json > site/manifest.json
+          sed -e "s|{{VERSION}}|${VERSION}|g" -e "s|{{REPO}}|${{ github.repository }}|g" \
+              -e "s|{{TAG}}|${{ github.ref_name }}|g" \
+              web/ota.template.json > site/ota.json
+          cp build/otbr-merged.bin site/otbr-merged.bin
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            build/esp32c5_otbr.bin
+            build/otbr-merged.bin
+
+      - name: Upload Pages artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            build/esp32c5_otbr.bin
+            build/otbr-merged.bin
+
+  # Separate job so deploy-pages gets the github-pages environment it requires.
+  deploy-pages:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

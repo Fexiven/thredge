@@ -1,0 +1,4 @@
+{
+  "version": "{{VERSION}}",
+  "url": "https://github.com/{{REPO}}/releases/download/{{TAG}}/esp32c5_otbr.bin"
+}
