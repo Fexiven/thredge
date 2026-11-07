@@ -56,7 +56,7 @@ CONFIG_OPENTHREAD_TASK_SIZE=8192
 
 #
 # ESP Thread Border Router example options (from the thread_border_router
-# component): standalone board, auto start, Web GUI, SoftAP Wi-Fi setup
+# component): standalone board, auto start, web server (for its Thread REST API), SoftAP Wi-Fi setup
 # (captive portal at http://192.168.4.1 when no credentials are stored).
 #
 CONFIG_ESP_BR_BOARD_STANDALONE=y
@@ -103,19 +103,20 @@ CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3584
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=5120
 
 #
-# HTTP server (Web GUI + captive portal + OTA endpoints)
+# HTTP servers (Thread REST API + captive portal on :80, OTA on :8080)
 #
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 
-# The web server draws max_open_sockets + 3 from this pool -- httpd reserves
-# 3 internally for the listener and its control socket pair -- so at the IDF
-# default of 10 it claims the entire pool on its own, leaving nothing for
-# mDNS, OpenThread's UDP sockets, or the outbound TLS connection that fetches
-# the update manifest (which failed with accept errno 23, ENFILE).
-CONFIG_LWIP_MAX_SOCKETS=24
+# Each httpd draws max_open_sockets + 3 from this pool (listener plus its
+# control socket pair): 7 + 3 for the border router's server, 3 + 3 for the
+# update server. At the IDF default of 10 nothing would be left for mDNS,
+# OpenThread's UDP sockets or the outbound TLS connection that fetches the
+# update manifest (which failed with accept errno 23, ENFILE).
+CONFIG_LWIP_MAX_SOCKETS=32
 
 #
 # OTA — where the device looks for new releases. Published to GitHub Pages
-# by .github/workflows/release.yml on every tag.
+# by .github/workflows/release.yml on every tag. Other OTA options (port,
+# auto/manual default, check interval) are under "OTBR OTA" in menuconfig.
 #
 CONFIG_OTBR_OTA_MANIFEST_URL="https://fexiven.github.io/thredge/ota.json"

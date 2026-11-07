@@ -83,11 +83,11 @@
   <ol>
     <li><strong>Install</strong> — the button above flashes the latest release over USB. Choose "Erase device" on a first install.</li>
     <li><strong>Connect it to Wi-Fi</strong> — after flashing, the device broadcasts a network named <code>ESP-ThreadBR-XXXX</code>. Join it with your phone and a setup page opens (or visit <code>http://192.168.4.1</code>). Pick your home network — the 5&nbsp;GHz one if you have it.</li>
-    <li><strong>Done</strong> — the border router starts and forms a Thread network. Manage it at <code>http://esp-otbr.local</code> — firmware updates live on the <strong>Update</strong> tab there.</li>
+    <li><strong>Done</strong> — the border router starts and forms a Thread network. It keeps itself up to date automatically; to check, switch to manual updates or upload a file, open <code>http://esp-otbr.local:8080</code>.</li>
   </ol>
 
   <h2>Joining an existing Thread network</h2>
-  <p class="fine">Running Home Assistant or another border router already? Copy your Thread network's active dataset (in HA: Settings → Devices → Thread) and paste it in the device's web interface so it extends your existing mesh instead of creating a new one.</p>
+  <p class="fine">Running Home Assistant or another border router already? Copy your Thread network's active dataset (in HA: Settings → Devices → Thread) and write it to the device so it extends your existing mesh instead of creating a new one — see the project README for the one-line commands.</p>
 
   <h2>Something not working?</h2>
   <p class="fine">If the serial port doesn't show up, try another cable &mdash; many USB-C cables are charge-only and carry no data lines. To start over, hold the BOOT button for five seconds — the setup network reappears. Bugs and questions: <a href="https://github.com/{{REPO}}">the project on GitHub</a>.</p>

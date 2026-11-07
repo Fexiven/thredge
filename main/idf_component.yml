@@ -4,9 +4,11 @@
 ## that the SoftAP setup + launch code and the CLI extension always match.
 dependencies:
   espressif/mdns: "^1.0.0"
-  espressif/esp_rcp_update:
-    version: "~1.6.0"
 
+  # Not used on the C5 (no RCP), but border_router_launch.h includes it. Taken
+  # from the submodule so it always matches the launch code.
+  esp_rcp_update:
+    path: ../third_party/esp-thread-br/components/esp_rcp_update
   esp_ot_cli_extension:
     path: ../third_party/esp-thread-br/components/esp_ot_cli_extension
   esp_ot_br_server:

@@ -28,9 +28,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply esp-thread-br patches
-        run: ./scripts/apply-patches.sh
-
       # PROJECT_VER comes from version.txt, so this must run before the build.
       - name: Stamp firmware version from tag
         if: startsWith(github.ref, 'refs/tags/')

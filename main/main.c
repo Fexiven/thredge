@@ -6,9 +6,9 @@
  *   1. Try Wi-Fi credentials stored in NVS.
  *   2. None stored / connection fails -> SoftAP "ESP-ThreadBR-XXXX" with a
  *      captive portal at http://192.168.4.1 for Wi-Fi setup.
- *   3. Connected -> border router starts, forms (or rejoins) a Thread
- *      network, Web GUI on port 80 with the firmware update page on its
- *      "Update" tab.
+ *   3. Connected -> border router starts and forms (or rejoins) a Thread
+ *      network. Espressif's Thread REST API answers on port 80; the update
+ *      server (components/otbr_ota) on port 8080.
  *
  * Holding the BOOT button (GPIO28) for 5 s erases the stored Wi-Fi
  * credentials and reboots into the setup AP.
@@ -46,7 +46,6 @@
 #include "esp_br_web.h"
 #endif
 #include "otbr_ota.h"
-#include "otbr_web.h"
 
 #define TAG "otbr_main"
 
@@ -141,18 +140,17 @@ void app_main(void)
     ESP_ERROR_CHECK(mdns_init());
     ESP_ERROR_CHECK(mdns_hostname_set(CONFIG_OTBR_MDNS_HOSTNAME));
 
-    /* Arms rollback confirmation. The update page and its API attach to the
-     * border router's own web server via esp_br_web_register_extra_uris(). */
+    /* Rollback confirmation, update worker and the update server on
+     * CONFIG_OTBR_OTA_HTTP_PORT. Must run before Wi-Fi comes up so it sees
+     * the first IP_EVENT_STA_GOT_IP. */
     ESP_ERROR_CHECK(otbr_ota_start());
-
-    /* Registers a WIFI_EVENT_STA_START handler that applies the stored band
-     * preference before the border router launches Wi-Fi below. */
-    ESP_ERROR_CHECK(otbr_web_init());
 
     xTaskCreate(factory_reset_button_task, "factory_reset", 3072, NULL, 3, NULL);
 
 #if CONFIG_OPENTHREAD_BR_START_WEB
-    /* Base path is unused: pages are served from the binary by otbr_web. */
+    /* Only the Thread REST API is wanted. This firmware has no SPIFFS
+     * partition (and never can: the partition table is frozen), so the stock
+     * HTML pages are not served; the base path is unused. */
     esp_br_web_start("");
 #endif
 
