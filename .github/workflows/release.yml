@@ -28,9 +28,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply esp-thread-br patches
-        run: ./scripts/apply-patches.sh
-
       # PROJECT_VER comes from version.txt, so this must run before the build.
       - name: Stamp firmware version from tag
         if: startsWith(github.ref, 'refs/tags/')
@@ -49,11 +46,16 @@ jobs:
       - name: Assemble Pages site (flasher + manifests)
         run: |
           VERSION="$(tr -d '[:space:]' < version.txt)"
+          # Devices compare this with a hash of their whole web_storage
+          # partition; the image is padded to the partition size, so the two
+          # match exactly when the contents do.
+          STORAGE_SHA256="$(sha256sum build/web_storage.bin | cut -d' ' -f1)"
           mkdir -p site
           sed -e "s|{{REPO}}|${{ github.repository }}|g" web/index.html > site/index.html
           sed -e "s|{{VERSION}}|${VERSION}|g" web/manifest.template.json > site/manifest.json
           sed -e "s|{{VERSION}}|${VERSION}|g" -e "s|{{REPO}}|${{ github.repository }}|g" \
               -e "s|{{TAG}}|${{ github.ref_name }}|g" \
+              -e "s|{{STORAGE_SHA256}}|${STORAGE_SHA256}|g" \
               web/ota.template.json > site/ota.json
           cp build/otbr-merged.bin site/otbr-merged.bin
 
@@ -63,6 +65,7 @@ jobs:
           name: firmware
           path: |
             build/esp32c5_otbr.bin
+            build/web_storage.bin
             build/otbr-merged.bin
 
       - name: Upload Pages artifact
@@ -78,6 +81,7 @@ jobs:
           generate_release_notes: true
           files: |
             build/esp32c5_otbr.bin
+            build/web_storage.bin
             build/otbr-merged.bin
 
   # Separate job so deploy-pages gets the github-pages environment it requires.

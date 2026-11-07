@@ -1,0 +1,111 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thredge firmware update</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 34rem; margin: 2rem auto; padding: 0 1rem; color: #222; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #ddd; background: #181818; } }
+  h1 { font-size: 1.3rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem 1rem; }
+  dt { opacity: .7; }
+  dd { margin: 0; }
+  section { margin: 1.5rem 0; }
+  button, select, input { font: inherit; }
+  #msg { min-height: 1.5em; font-weight: 600; }
+  .err { color: #c33; }
+</style>
+</head>
+<body>
+<h1>Thredge firmware</h1>
+<dl>
+  <dt>Running</dt><dd id="version">…</dd>
+  <dt>Latest</dt><dd id="latest">unknown</dd>
+  <dt>State</dt><dd id="state">…</dd>
+</dl>
+<p id="msg"></p>
+
+<section>
+  <label>Update mode
+    <select id="mode">
+      <option value="auto">Automatic: install new releases</option>
+      <option value="manual">Manual: only report them</option>
+    </select>
+  </label>
+</section>
+
+<section>
+  <button id="check">Check now</button>
+  <button id="install" disabled>Install latest</button>
+</section>
+
+<section>
+  <label>Upload firmware (<code>esp32c5_otbr.bin</code>)<br>
+    <input type="file" id="file" accept=".bin"></label>
+  <button id="upload">Upload</button>
+</section>
+
+<section>
+  <label>Upload web UI (<code>web_storage.bin</code> from the same release)<br>
+    <input type="file" id="sfile" accept=".bin"></label>
+  <button id="supload">Upload</button>
+</section>
+
+<p><a href="" id="ui">Border router web UI</a><span id="dump"></span></p>
+
+<script>
+const $ = id => document.getElementById(id);
+const H = {'X-Thredge': '1'};
+let busy = false, timer = null;
+
+function show(text, err) { $('msg').textContent = text || ''; $('msg').className = err ? 'err' : ''; }
+
+async function post(path, body) {
+  const r = await fetch(path, {method: 'POST', headers: H, body});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+async function refresh() {
+  try {
+    const s = await (await fetch('/api/ota/status')).json();
+    $('version').textContent = s.version + (s.pending_verify ? ' (being verified)' : '');
+    $('latest').textContent = s.latest ? s.latest + (s.update_available ? ' — update available' : '') : 'unknown';
+    $('state').textContent = s.state + (s.progress != null ? ' ' + s.progress + '%' : '');
+    if (document.activeElement !== $('mode')) $('mode').value = s.mode;
+    busy = s.state !== 'idle';
+    $('install').disabled = busy || !s.latest || (s.latest === s.version && !s.update_available);
+    $('check').disabled = $('upload').disabled = $('supload').disabled = busy;
+    $('dump').innerHTML = s.coredump ? ' · <a href="/api/coredump">download crash dump</a>' : '';
+    if (s.error) show(s.error, true);
+    else if (s.rolled_back_from && !$('msg').textContent) show('Version ' + s.rolled_back_from + ' failed to start and was rolled back.', true);
+  } catch (e) {
+    $('state').textContent = 'device unreachable (rebooting?)';
+  }
+  clearTimeout(timer);
+  timer = setTimeout(refresh, busy ? 1500 : 10000);
+}
+
+$('mode').onchange = () => post('/api/ota/mode', $('mode').value).then(() => show('Mode saved.')).catch(e => show(e.message, true));
+$('check').onclick = () => post('/api/ota/check').then(() => { show('Checking…'); setTimeout(refresh, 500); }).catch(e => show(e.message, true));
+$('install').onclick = () => {
+  if (!confirm('Install the latest release? The device reboots if the firmware changes.')) return;
+  post('/api/ota/install').then(j => { show(j.status); setTimeout(refresh, 500); }).catch(e => show(e.message, true));
+};
+function upload(input, path) {
+  const f = $(input).files[0];
+  if (!f) return show('Choose a file first.', true);
+  show('Uploading ' + f.name + '…');
+  busy = true; refresh();
+  post(path, f).then(j => show(j.status)).catch(e => show(e.message, true)).finally(refresh);
+}
+$('upload').onclick = () => upload('file', '/api/ota/upload');
+$('supload').onclick = () => upload('sfile', '/api/ota/upload-storage');
+$('ui').href = 'http://' + location.hostname + '/';
+refresh();
+</script>
+</body>
+</html>

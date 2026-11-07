@@ -3,10 +3,64 @@ menu "OTBR OTA"
 
     config OTBR_OTA_MANIFEST_URL
         string "Release manifest URL"
-        default "https://YOUR-GITHUB-USER.github.io/esp32c5-otbr/ota.json"
+        default "https://fexiven.github.io/thredge/ota.json"
         help
-            HTTPS URL of the JSON release manifest, e.g. published by the
-            GitHub Pages workflow of this project. Expected format:
-            {"version": "1.2.3", "url": "https://.../esp32c5_otbr.bin"}
+            HTTPS URL of the JSON release manifest published to GitHub Pages by
+            .github/workflows/release.yml. Expected format:
+            {"version": "2026.10.0", "url": "https://.../esp32c5_otbr.bin"}
+
+    config OTBR_OTA_HTTP_PORT
+        int "Update server port"
+        range 1 65535
+        default 8080
+        help
+            Port of the small update server (status page, update API). Port 80
+            belongs to the border router's own REST API.
+
+    config OTBR_OTA_AUTO_DEFAULT
+        bool "Install updates automatically by default"
+        default y
+        help
+            Initial update mode on a device that has never had one chosen.
+            Auto: the device checks the manifest and installs newer releases
+            on its own. Manual: it only reports that an update is available.
+            The mode can be changed at runtime and is stored in NVS.
+
+    config OTBR_OTA_CHECK_INTERVAL_HOURS
+        int "Hours between update checks"
+        range 1 720
+        default 24
+        help
+            How often the device checks the release manifest. In manual mode
+            the result is only reported; in auto mode a newer release is
+            installed. A failed check is retried after one hour.
+
+    config OTBR_OTA_FIRST_CHECK_DELAY_S
+        int "Delay before the first check after boot (s)"
+        range 10 3600
+        default 300
+        help
+            Gives the border router time to settle before the first check, and
+            keeps a device that reboots repeatedly from hammering the server.
+
+    config OTBR_OTA_CONFIRM_DELAY_S
+        int "Seconds online before a new image is confirmed"
+        range 0 3600
+        default 60
+        help
+            A freshly installed image boots "pending verify". It is marked
+            valid only after it has had an IP address for this long. If it
+            crashes or resets before then, the bootloader rolls back to the
+            previous image.
+
+    config OTBR_OTA_CONFIRM_DEADLINE_MIN
+        int "Minutes to wait for a new image to come online"
+        range 0 1440
+        default 15
+        help
+            If a pending image has not been confirmed after this long, the
+            device reboots, which makes the bootloader roll back to the
+            previous image. 0 disables the deadline (then an image that hangs
+            without crashing stays until the next reset).
 
 endmenu
