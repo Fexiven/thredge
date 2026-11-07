@@ -7,8 +7,8 @@
  *   2. None stored / connection fails -> SoftAP "ESP-ThreadBR-XXXX" with a
  *      captive portal at http://192.168.4.1 for Wi-Fi setup.
  *   3. Connected -> border router starts and forms (or rejoins) a Thread
- *      network. Espressif's Thread REST API answers on port 80; the update
- *      server (components/otbr_ota) on port 8080.
+ *      network. Espressif's web UI and Thread REST API answer on port 80;
+ *      the update server (components/otbr_ota) on port 8080.
  *
  * Holding the BOOT button (GPIO28) for 5 s erases the stored Wi-Fi
  * credentials and reboots into the setup AP.
@@ -140,18 +140,17 @@ void app_main(void)
     ESP_ERROR_CHECK(mdns_init());
     ESP_ERROR_CHECK(mdns_hostname_set(CONFIG_OTBR_MDNS_HOSTNAME));
 
-    /* Rollback confirmation, update worker and the update server on
-     * CONFIG_OTBR_OTA_HTTP_PORT. Must run before Wi-Fi comes up so it sees
-     * the first IP_EVENT_STA_GOT_IP. */
+    /* Mounts web_storage at /spiffs, then rollback confirmation, update
+     * worker and the update server on CONFIG_OTBR_OTA_HTTP_PORT. Must run
+     * before Wi-Fi comes up so it sees the first IP_EVENT_STA_GOT_IP. */
     ESP_ERROR_CHECK(otbr_ota_start());
 
     xTaskCreate(factory_reset_button_task, "factory_reset", 3072, NULL, 3, NULL);
 
 #if CONFIG_OPENTHREAD_BR_START_WEB
-    /* Only the Thread REST API is wanted. This firmware has no SPIFFS
-     * partition (and never can: the partition table is frozen), so the stock
-     * HTML pages are not served; the base path is unused. */
-    esp_br_web_start("");
+    /* Espressif's stock web UI and Thread REST API on port 80, served from
+     * the web_storage partition mounted by otbr_ota_start(). */
+    esp_br_web_start("/spiffs");
 #endif
 
     launch_openthread_border_router(&openthread_config, &rcp_update_config);

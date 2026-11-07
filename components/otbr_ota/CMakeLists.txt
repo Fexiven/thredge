@@ -8,6 +8,9 @@ set(priv_requires esp_http_server
                   mbedtls
                   esp_event
                   esp_netif
+                  esp_partition
+                  espcoredump
+                  spiffs
                   nvs_flash)
 
 # IDF < 6.0 ships a built-in json component; from 6.0 it is gone and cJSON

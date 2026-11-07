@@ -21,7 +21,9 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
-CONFIG_PARTITION_TABLE_OFFSET=0x8000
+# 0xC000 rather than the default 0x8000, which left the bootloader 8%
+# headroom. See partitions.csv.
+CONFIG_PARTITION_TABLE_OFFSET=0xC000
 CONFIG_PARTITION_TABLE_MD5=y
 
 #
@@ -29,6 +31,13 @@ CONFIG_PARTITION_TABLE_MD5=y
 # automatically unless the app confirms itself (see otbr_ota component).
 #
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+#
+# Crash dumps to the "coredump" partition, downloadable from the update
+# server (GET /api/coredump on port 8080).
+#
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
 
 #
 # Compiler / newlib

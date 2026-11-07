@@ -1,4 +1,6 @@
 {
   "version": "{{VERSION}}",
-  "url": "https://github.com/{{REPO}}/releases/download/{{TAG}}/esp32c5_otbr.bin"
+  "url": "https://github.com/{{REPO}}/releases/download/{{TAG}}/esp32c5_otbr.bin",
+  "storage_url": "https://github.com/{{REPO}}/releases/download/{{TAG}}/web_storage.bin",
+  "storage_sha256": "{{STORAGE_SHA256}}"
 }

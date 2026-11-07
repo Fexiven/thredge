@@ -13,14 +13,17 @@ Built on Espressif's [esp-thread-br](https://github.com/espressif/esp-thread-br)
 - **Captive-portal Wi-Fi setup**: with no stored credentials the device
   broadcasts `ESP-ThreadBR-XXXX`; join it and a setup page opens at
   `http://192.168.4.1` (upstream's `OPENTHREAD_BR_SOFTAP_SETUP`)
-- **Thread REST API** on port 80: Espressif's ot-br-posix-compatible API
-  (`/node`, `/node/dataset/active`, `/node/state`, ...). There is deliberately
-  no web UI beyond that
+- **Espressif's stock web UI and Thread REST API** on port 80, served from
+  the `web_storage` SPIFFS partition: status, network forming/joining,
+  topology, commissioning. The REST API is ot-br-posix compatible (`/node`,
+  `/node/dataset/active`, `/node/state`, ...)
 - **OTA updates** from GitHub releases, either **automatic** (default) or
-  **manual**, switchable at runtime, plus `.bin` upload. A small update server
-  on port **8080** has one plain status page and a JSON API. New images are
-  verified before they are written and roll back automatically if they do not
-  come up
+  **manual**, switchable at runtime, plus `.bin` upload. Each release updates
+  both the firmware and the web UI. A small update server on port **8080** has
+  one plain status page and a JSON API. New firmware is verified before it is
+  written and rolls back automatically if it does not come up
+- **Crash dumps** are kept in flash and can be downloaded from the update
+  server
 - **Factory reset**: hold the BOOT button (GPIO28) for 5 s to erase Wi-Fi
   credentials and return to the setup AP
 - **Web flasher**: a GitHub Pages site so users install over USB from the
@@ -33,15 +36,18 @@ Built on Espressif's [esp-thread-br](https://github.com/espressif/esp-thread-br)
 2. Join the `ESP-ThreadBR-XXXX` Wi-Fi network with your phone and enter your
    home Wi-Fi on the page that opens (pick your 5 GHz network if you have one).
 3. That's it. The border router forms a Thread network and keeps itself up to
-   date. `http://esp-otbr.local:8080` shows the firmware version and lets you
-   check for updates, switch between automatic and manual updates, or upload
-   a firmware file.
+   date. `http://esp-otbr.local` is the border router's web UI;
+   `http://esp-otbr.local:8080` shows the firmware version and lets you check
+   for updates, switch between automatic and manual updates, or upload a file.
 
 ### Joining an existing Thread network
 
 To extend an existing mesh (e.g. Home Assistant's) instead of forming a new
 one, write its active dataset (the TLV hex HA shows under Settings → Devices
-→ Thread) while Thread is stopped:
+→ Thread) through the REST API while Thread is stopped. Prefer this over the
+stock UI's "Join" form: that uses `/join_network`, which in earlier upstream
+versions wrote only channel, PAN ID and network key (no extended PAN ID), so
+the node never got past `detached`.
 
 ```bash
 curl -X PUT -H 'Content-Type: application/json' -d '"disable"' http://esp-otbr.local/node/state
@@ -82,6 +88,12 @@ Safety rules that apply to every install:
   reboots after 15 min to trigger that rollback.
 - Nothing is installed while the running image is still pending verify,
   because that would overwrite the slot it would roll back to.
+- The web UI (`web_storage`) has no second slot. It is rewritten in place
+  when its SHA-256 differs from the release's, but only together with, or
+  after, the firmware it belongs to, so the pages never run ahead of the API
+  they call. The written partition is hashed again and must match. If a write
+  is interrupted, the UI is missing until the next check rewrites it; the
+  firmware, the update server and Thread are unaffected.
 - Wi-Fi credentials and the Thread dataset live in NVS and survive updates.
 
 ## For developers
@@ -95,10 +107,8 @@ cd thredge
 
 `third_party/esp-thread-br` is used exactly as upstream ships it, and
 Dependabot bumps it monthly. Each bump PR is built by CI, so a breaking
-upstream change fails before it can be merged. The one thing upstream does
-that does not fit this firmware (packing its web UI into a `web_storage`
-SPIFFS partition this layout does not have) is turned off from
-`main/project_include.cmake` rather than by a patch.
+upstream change fails before it can be merged. Its stock web UI is packed
+into `build/web_storage.bin` by upstream's own build rule.
 
 Requires ESP-IDF **v5.5.2 or newer**. Earlier 5.5.x releases lack
 `examples/openthread/ot_common_components/ot_examples_common`, which the
@@ -134,7 +144,8 @@ uvx --from "esptool==4.12.0" esptool.py --chip esp32c5 -p /dev/cu.usbmodem101 \
 ```
 
 To update the app without erasing stored Wi-Fi credentials, flash only the app
-partition: `write_flash 0x20000 build/esp32c5_otbr.bin`.
+partition: `write_flash 0x20000 build/esp32c5_otbr.bin` (and the UI with
+`write_flash 0x760000 build/web_storage.bin`).
 
 Boards using the chip's native USB (Seeed XIAO ESP32-C5 and similar) appear as
 `/dev/cu.usbmodem*`; boards with a USB-UART bridge (ESP32-C5-DevKitC-1) appear
@@ -154,12 +165,12 @@ of the USB Serial/JTAG console this repo defaults to.
 ### Layout
 
 ```
-main/                       app entry, radio config, Kconfig,
-                            project_include.cmake (skips upstream's SPIFFS image)
-components/otbr_ota/        update worker, update server (:8080), rollback
+main/                       app entry, radio config, Kconfig
+components/otbr_ota/        update worker, update server (:8080), rollback,
+                            web_storage mount + updates, crash dump download
 third_party/esp-thread-br/  Espressif BR SDK (git submodule, unpatched)
 web/                        flasher page + manifest templates (GitHub Pages)
-partitions.csv              dual-OTA 8 MB layout, frozen since 2026.09.0
+partitions.csv              8 MB layout (see below), frozen from the next release
 .github/workflows/          build on PRs, build + release + Pages on tags
 ```
 
@@ -171,10 +182,12 @@ partitions.csv              dual-OTA 8 MB layout, frozen since 2026.09.0
 | `/api/ota/status` | GET | version, partition, mode, state, progress, latest release, last error |
 | `/api/ota/check` | POST | check the manifest now |
 | `/api/ota/install` | POST | install the manifest's release (also allows going back to it) |
-| `/api/ota/upload` | POST | install a `.bin` sent as the raw request body |
+| `/api/ota/upload` | POST | install a firmware `.bin` sent as the raw request body |
+| `/api/ota/upload-storage` | POST | write a `web_storage.bin` sent as the raw request body |
 | `/api/ota/mode` | POST | body `auto` or `manual` |
+| `/api/coredump` | GET / DELETE | download (ELF) or erase the stored crash dump |
 
-Every POST needs an `X-Thredge` header (any value). Browsers will not send a
+Every POST and DELETE needs an `X-Thredge` header (any value). Browsers will not send a
 custom header cross-origin without a CORS preflight, which this server never
 approves, so a random web page cannot start an update. There is no
 authentication beyond that: anyone on your LAN can reach the device, just as
@@ -188,18 +201,36 @@ curl -X POST -H 'X-Thredge: 1' --data-binary @build/esp32c5_otbr.bin \
 ### Releasing
 
 Push a calendar-version tag (`2026.11.0`; a leading `v` is stripped). CI
-stamps `version.txt`, builds, attaches `esp32c5_otbr.bin` and
-`otbr-merged.bin` to a GitHub release and publishes the flasher and
-`ota.json` to Pages. Devices in auto mode pick it up within a day. Versions
+stamps `version.txt`, builds, attaches `esp32c5_otbr.bin`, `web_storage.bin`
+and `otbr-merged.bin` to a GitHub release and publishes the flasher and
+`ota.json` (with the SHA-256 of `web_storage.bin`) to Pages. Devices in auto mode pick it up within a day. Versions
 must keep increasing numerically: auto-update never installs a version that
 compares as older or equal.
 
 ### Notes
 
-- **Partition table is frozen.** OTA can never change it; altering it strands
-  existing devices.
-- Devices on 2026.09.x update to this firmware as usual (their Update tab);
-  from then on they update themselves.
+- **Partition table is frozen** from the next release. OTA can never change
+  it; altering it strands existing devices.
+- **Devices on 2026.09.x must be reflashed over USB** (flasher page, "Erase
+  device"), because this release changes the partition table. An OTA from
+  2026.09.x would boot, find no `web_storage`, and run without a UI.
+
+### Partition layout
+
+| Partition | Offset | Size | Basis |
+| --- | --- | --- | --- |
+| bootloader | 0x2000 | up to 40 KB | 22 KB today |
+| partition table | 0xC000 | 4 KB | moved from 0x8000 (8% bootloader headroom) as esp-matter and IDF's secure boot / flash encryption examples do |
+| nvs | 0xD000 | 64 KB | Wi-Fi, Thread dataset, update mode |
+| otadata | 0x1D000 | 8 KB | standard |
+| phy_init | 0x1F000 | 4 KB | standard |
+| ota_0 / ota_1 | 0x20000 / 0x3C0000 | 3.625 MB each | app is ~1.8 MB |
+| web_storage | 0x760000 | 576 KB | stock UI is 112 KB; upstream's example uses 200 KB |
+| coredump | 0x7F0000 | 64 KB | as in arduino-esp32's `default_8MB` |
+
+Crash dumps: download with
+`curl -o core.elf http://esp-otbr.local:8080/api/coredump` and read with
+`idf.py coredump-info --core core.elf` against the matching build's ELF.
 
 ## Known limitations
 
@@ -210,9 +241,8 @@ compares as older or equal.
   throughput under heavy Wi-Fi load.
 - **The stock SoftAP setup page may find no networks** on first boot (seen
   with earlier upstream versions). Entering the SSID and password by hand works.
-- **No web UI for Thread.** By design: the REST API on port 80 (or the USB
-  console) is the interface. `http://esp-otbr.local/` itself has nothing to
-  serve.
+- **Firmware updates live on port 8080**, not in the stock UI on port 80:
+  adding them there would mean patching esp-thread-br again.
 - **Joining by commissioner PSKd is not documented here.** The REST API
   supports a commissioner join; this README only covers writing a dataset.
 

@@ -1,16 +1,28 @@
 # ESP32-C5 OTBR — 8 MB flash layout (dual OTA)
 #
-# Everything that changes between releases lives in the app image, so an OTA
-# update replaces it as a whole and the bootloader's rollback covers all of
-# it. NVS holds Wi-Fi credentials, the Thread dataset and the update mode, so
-# they survive an update.
+# The app and the stock web UI (web_storage, SPIFFS) are both updated over
+# the air: the app through the A/B slots with bootloader rollback, the UI by
+# rewriting web_storage in place when its SHA-256 differs from the release
+# manifest (components/otbr_ota). NVS holds Wi-Fi credentials, the Thread
+# dataset and the update mode, so they survive an update.
 #
-# IMPORTANT: never change this layout after a public release — OTA can replace
-# the app, but never the partition table.
+# The partition table sits at 0xC000 (CONFIG_PARTITION_TABLE_OFFSET) rather
+# than the default 0x8000, as in esp-matter and ESP-IDF's secure boot / flash
+# encryption examples: at 0x8000 the bootloader had only 8% headroom left.
+# With the table there, NVS, otadata and phy_init end exactly at 0x20000.
 #
-# Name,       Type, SubType, Offset,   Size,     Flags
-nvs,          data, nvs,     ,         0x10000,
-otadata,      data, ota,     ,         0x2000,
-phy_init,     data, phy,     ,         0x1000,
-ota_0,        app,  ota_0,   0x20000,  0x3A0000,
-ota_1,        app,  ota_1,   ,         0x3A0000,
+# coredump: crash dumps are kept in flash (CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH)
+# and can be downloaded from the update server. Same size and position as
+# arduino-esp32's default_8MB layout.
+#
+# IMPORTANT: never change this layout (or the table offset) after a public
+# release. OTA can replace the app and web_storage, never the partition table.
+#
+# Name,       Type, SubType,  Offset,   Size,     Flags
+nvs,          data, nvs,      0xD000,   0x10000,
+otadata,      data, ota,      0x1D000,  0x2000,
+phy_init,     data, phy,      0x1F000,  0x1000,
+ota_0,        app,  ota_0,    0x20000,  0x3A0000,
+ota_1,        app,  ota_1,    0x3C0000, 0x3A0000,
+web_storage,  data, spiffs,   0x760000, 0x90000,
+coredump,     data, coredump, 0x7F0000, 0x10000,
